@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mobile Pedometer — Steps, Distance & Weather</title>
+<style>
+  /* Mobile-first simple UI */
+  :root{
+    --bg:#08121a;
+    --card:#0f2b3a;
+    --accent:#00d1ff;
+    --muted:#9fb9c6;
+    --glass: rgba(255,255,255,0.03);
+  }
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  body{
+    background: linear-gradient(180deg,var(--bg) 0%, #03151a 100%);
+    color: #e6f7fb;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:18px;
+  }
+  .app{
+    width:100%;
+    max-width:420px;
+  }
+  header{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+  header h1{font-size:1.1rem;margin:0}
+  .card{
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:14px;
+    padding:14px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    margin-bottom:12px;
+    border: 1px solid rgba(255,255,255,0.03);
+  }
+
+  .pedometer {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .metrics{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .big {
+    font-size:2.4rem;
+    font-weight:700;
+    letter-spacing: -0.02em;
+  }
+  .small { color:var(--muted); font-size:0.9rem; }
+
+  .controls{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+    flex-wrap:wrap;
+  }
+  button{
+    background:var(--accent);
+    color:#002028;
+    border:none;
+    padding:10px 12px;
+    border-radius:10px;
+    font-weight:600;
+    box-shadow:0 6px 18px rgba(0,0,0,0.25);
+  }
+  button.ghost{
+    background:transparent;
+    color:var(--muted);
+    border:1px solid rgba(255,255,255,0.04);
+  }
+
+  .info-row{display:flex;justify-content:space-between;gap:8px;align-items:center;}
+  .muted { color:var(--muted); font-size:0.95rem; }
+
+  .weather {
+    display:flex;
+    gap:12px;
+    align-items:center;
+  }
+  .weather .icon{
+    width:56px;height:56px;border-radius:10px;background:var(--glass);display:flex;align-items:center;justify-content:center;font-size:1.2rem;
+  }
+
+  label{font-size:0.9rem;color:var(--muted)}
+  input[type=range]{width:100%}
+
+  footer{margin-top:12px;text-align:center;color:var(--muted);font-size:0.85rem}
+  .warn { color:#ffb86b; font-weight:600; }
+
+  /* responsive tweaks */
+  @media(min-width:760px){
+    body{padding:30px}
+    header h1{font-size:1.3rem}
+  }
+</style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Pedometer app">
+    <header>
+      <div>
+        <h1>🚶 Mobile Pedometer</h1>
+        <div class="muted">Steps · Distance · Weather · Location</div>
+      </div>
+    </header>
+
+    <!-- Pedometer card -->
+    <section class="card" aria-live="polite">
+      <div class="pedometer">
+        <div class="metrics">
+          <div>
+            <div class="small">Total Steps</div>
+            <div id="steps" class="big">0</div>
+          </div>
+          <div style="margin-top:6px">
+            <div class="small">Estimated Distance</div>
+            <div id="distance" class="big">0 m</div>
+          </div>
+        </div>
+
+        <div style="min-width:90px;text-align:right">
+          <div class="small">Stride (m)</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="number" id="strideInput" value="0.78" step="0.01" min="0.4" style="width:72px;padding:8px;border-radius:8px;border:none;background:rgba(255,255,255,0.02);color:inherit;font-weight:600">
+          </div>
+          <div class="small" style="margin-top:6px;color:var(--muted)">Adjust stride length</div>
+        </div>
+      </div>
+
+      <div class="controls" style="margin-top:12px">
+        <button id="startBtn">Start Tracking</button>
+        <button class="ghost" id="resetBtn">Reset Steps</button>
+        <button class="ghost" id="permBtn">Sensor Permissions</button>
+      </div>
+
+      <div style="margin-top:12px" class="info-row">
+        <div>
+          <div class="small">Status</div>
+          <div id="status" class="muted">Stopped</div>
+        </div>
+        <div style="text-align:right">
+          <div class="small">Session Steps</div>
+          <div id="sessionSteps" class="muted">0</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Location & Weather card -->
+    <section class="card" aria-live="polite">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <div class="small">Location</div>
+          <div id="locName" style="font-weight:700">—</div>
+          <div id="coords" class="muted">lat: — , lon: —</div>
+        </div>
+
+        <div class="weather">
+          <div class="icon" id="weatherIcon">☀️</div>
+          <div>
+            <div class="small">Weather</div>
+            <div id="weatherMain" style="font-weight:700">—</div>
+            <div id="weatherTemp" class="muted">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px" class="muted">Weather & location update every 5 minutes (or when permission granted).</div>
+    </section>
+
+    <!-- Debug / Permission info -->
+    <section class="card" id="debugCard">
+      <div class="small">Debug / Permissions</div>
+      <div style="margin-top:8px" class="muted" id="debug">Sensors: unknown · Geolocation: unknown</div>
+      <div style="margin-top:10px">
+        <small class="muted">Notes: iOS requires explicit permission for motion sensors. If sensors don't work, open in Safari on iOS and tap "Allow" when prompted, or use Chrome/Firefox on Android.</small>
+      </div>
+    </section>
+
+    <footer>Made with Web APIs — DeviceMotion / Geolocation / Fetch</footer>
+  </div>
+
+<script>
+/*
+  Pedometer + Location + Weather
+  - Uses Accelerometer Sensor API where supported, otherwise falls back to 'devicemotion' events.
+  - Simple step detection: high-pass filter to remove gravity, then peak detection with cooldown.
+  - Stores total steps in localStorage under 'pedometer_steps'.
+  - Fetches weather from OpenWeatherMap by coordinates. USER MUST INSERT API KEY below.
+*/
+
+/* -------------------- Configuration -------------------- */
+const WEATHER_API_KEY = 'YOUR_OPENWEATHERMAP_API_KEY'; // <-- REPLACE WITH YOUR KEY
+const WEATHER_POLL_MS = 5 * 60 * 1000; // fetch weather every 5 minutes
+const GEO_OPTIONS = { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 };
+
+/* -------------------- State & Elements -------------------- */
+const stepsEl = document.getElementById('steps');
+const distanceEl = document.getElementById('distance');
+const strideInput = document.getElementById('strideInput');
+const startBtn = document.getElementById('startBtn');
+const resetBtn = document.getElementById('resetBtn');
+const permBtn = document.getElementById('permBtn');
+const statusEl = document.getElementById('status');
+const sessionStepsEl = document.getElementById('sessionSteps');
+const debugEl = document.getElementById('debug');
+const locNameEl = document.getElementById('locName');
+const coordsEl = document.getElementById('coords');
+const weatherMainEl = document.getElementById('weatherMain');
+const weatherTempEl = document.getElementById('weatherTemp');
+const weatherIconEl = document.getElementById('weatherIcon');
+
+let totalSteps = Number(localStorage.getItem('pedometer_steps') || 0);
+let sessionSteps = 0;
+let tracking = false;
+
+/* -------------------- Step detection params -------------------- */
+/*
+  Approach:
+  - Use magnitude = sqrt(x^2 + y^2 + z^2)
+  - Use a simple low-pass filter to estimate gravity, subtract to get linear acceleration
+  - Detect peaks where linearAcc > threshold and there's been a cooldown since last step
+*/
+let gravity = 0;
+const alpha = 0.9;        // low-pass filter factor for gravity
+const STEP_THRESHOLD = 1.05; // threshold for linear acceleration magnitude (tweakable)
+const STEP_COOLDOWN = 350; // milliseconds between steps (debounce)
+let lastStepTime = 0;
+
+/* For Sensor API */
+let accSensor = null;
+
+/* Initialize UI from stored state */
+function refreshUI(){
+  stepsEl.textContent = totalSteps;
+  sessionStepsEl.textContent = sessionSteps;
+  const stride = parseFloat(strideInput.value) || 0.78;
+  const meters = (totalSteps * stride);
+  distanceEl.textContent = meters >= 1000 ? (meters/1000).toFixed(2) + ' km' : Math.round(meters) + ' m';
+}
+refreshUI();
+
+/* -------------------- Utility helpers -------------------- */
+function saveSteps(){
+  localStorage.setItem('pedometer_steps', String(totalSteps));
+}
+
+/* Called when we detect a step */
+function registerStep(){
+  const now = Date.now();
+  if (now - lastStepTime < STEP_COOLDOWN) return; // debounce
+  lastStepTime = now;
+  totalSteps += 1;
+  sessionSteps += 1;
+  saveSteps();
+  refreshUI();
+}
+
+/* -------------------- Sensor handling -------------------- */
+async function startSensors(){
+  // Clear any previous sensor
+  stopSensors();
+
+  // Prefer the Generic Sensor API (Accelerometer)
+  if ('Accelerometer' in window) {
+    try {
+      accSensor = new Accelerometer({ frequency: 50 }); // 50Hz
+      accSensor.addEventListener('reading', () => {
+        const x = accSensor.x || 0;
+        const y = accSensor.y || 0;
+        const z = accSensor.z || 0;
+        handleAcceleration(x, y, z);
+      });
+      accSensor.addEventListener('error', (err) => {
+        console.warn('Accelerometer error', err);
+        accSensor = null;
+        // fallback to devicemotion
+        initDeviceMotionFallback();
+      });
+      accSensor.start();
+      debugEl.textContent = 'Sensors: Accelerometer API active';
+      statusEl.textContent = 'Tracking (sensor)';
+    } catch (err) {
+      console.warn('Accelerometer init failed:', err);
+      debugEl.textContent = 'Sensors: Accelerometer init failed, falling back';
+      initDeviceMotionFallback();
+    }
+  } else {
+    initDeviceMotionFallback();
+  }
+}
+
+/* Fallback to devicemotion event */
+function initDeviceMotionFallback(){
+  if (typeof DeviceMotionEvent !== 'undefined') {
+    // On iOS 13+ this requires a permission request
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+      debugEl.textContent = 'Sensors: devicemotion requires permission';
+      // Don't request here automatically; user will tap permission button
+      statusEl.textContent = 'Paused (awaiting sensor permission)';
+    } else {
+      window.addEventListener('devicemotion', deviceMotionHandler);
+      debugEl.textContent = 'Sensors: devicemotion active (no permission required)';
+      statusEl.textContent = 'Tracking (devicemotion)';
+    }
+  } else {
+    debugEl.textContent = 'Sensors: not supported on this device';
+    statusEl.textContent = 'Not supported';
+  }
+}
+
+function deviceMotionHandler(ev){
+  const a = ev.accelerationIncludingGravity;
+  if (!a) return;
+  handleAcceleration(a.x || 0, a.y || 0, a.z || 0);
+}
+
+function stopSensors(){
+  if (accSensor) {
+    try { accSensor.stop(); } catch(e){/*ignore*/ }
+    accSensor = null;
+  }
+  window.removeEventListener('devicemotion', deviceMotionHandler);
+}
+
+/* High-level accelerometer processing */
+function handleAcceleration(x,y,z){
+  // magnitude of acceleration vector
+  const magnitude = Math.sqrt(x*x + y*y + z*z);
+
+  // low-pass filter to estimate gravity
+  gravity = alpha * gravity + (1 - alpha) * magnitude;
+
+  // linear acceleration (approx) = magnitude - gravity
+  const linearAcc = Math.abs(magnitude - gravity);
+
+  // basic threshold & cooldown detection
+  if (linearAcc > STEP_THRESHOLD) {
+    registerStep();
+  }
+}
+
+/* -------------------- Permissions flow -------------------- */
+async function requestSensorPermission(){
+  // Try Sensor API (no explicit permission prompt available)
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res === 'granted') {
+        debugEl.textContent = 'Sensors: permission granted (devicemotion)';
+        window.addEventListener('devicemotion', deviceMotionHandler);
+        statusEl.textContent = 'Tracking (devicemotion)';
+      } else {
+        debugEl.textContent = 'Sensors: permission denied';
+        statusEl.textContent = 'Permission denied';
+      }
+    } catch (err) {
+      console.warn('Permission request error', err);
+      debugEl.textContent = 'Sensors: permission request failed';
+      statusEl.textContent = 'Permission error';
+    }
+    return;
+  }
+
+  // For Accelerometer API (Generic Sensor) some browsers don't require explicit permission.
+  // We'll attempt to start sensors and catch errors.
+  try {
+    await startSensors();
+  } catch(err) {
+    console.warn('startSensors error', err);
+    debugEl.textContent = 'Sensors: cannot start (see console)';
+  }
+}
+
+/* -------------------- Start/stop tracking handlers -------------------- */
+startBtn.addEventListener('click', async () => {
+  if (tracking) {
+    // stop
+    stopSensors();
+    tracking = false;
+    startBtn.textContent = 'Start Tracking';
+    statusEl.textContent = 'Stopped';
+    debugEl.textContent = debugEl.textContent.replace('active','stopped');
+  } else {
+    tracking = true;
+    startBtn.textContent = 'Stop Tracking';
+    statusEl.textContent = 'Initializing...';
+    // Request sensor permission where required
+    await requestSensorPermission();
+    // If Accelerometer API is available and not started yet, start it
+    if (!accSensor && typeof Accelerometer !== 'undefined') {
+      try { await startSensors(); } catch(e){ /* fallback handled inside */ }
+    }
+    // If still not using sensors, make sure fallback is set
+    if (!accSensor && typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission !== 'function') {
+      window.addEventListener('devicemotion', deviceMotionHandler);
+      debugEl.textContent = 'Sensors: devicemotion active';
+      statusEl.textContent = 'Tracking (devicemotion)';
+    }
+  }
+});
+
+/* Reset steps button */
+resetBtn.addEventListener('click', () => {
+  totalSteps = 0;
+  sessionSteps = 0;
+  saveSteps();
+  refreshUI();
+});
+
+/* Permission helper button (explicit) */
+permBtn.addEventListener('click', async () => {
+  // Ask for geolocation and motion permissions explicitly
+  // Geolocation permission via getCurrentPosition prompt
+  try {
+    navigator.geolocation.getCurrentPosition((p) => {
+      debugEl.textContent = 'Geolocation: granted';
+      updateLocationDisplay(p.coords.latitude, p.coords.longitude);
+      fetchWeatherForCoords(p.coords.latitude, p.coords.longitude);
+    }, (err) => {
+      console.warn('geo permission denied', err);
+      debugEl.textContent = 'Geolocation: denied';
+    }, GEO_OPTIONS);
+  } catch(e){
+    debugEl.textContent = 'Geolocation: error';
+  }
+
+  // Motion sensors
+  await requestSensorPermission();
+});
+
+/* Save stride change */
+strideInput.addEventListener('change', () => { refreshUI(); });
+
+/* -------------------- Geolocation & Weather -------------------- */
+let geoWatchId = null;
+function startGeolocation(){
+  if (!('geolocation' in navigator)) {
+    coordsEl.textContent = 'Geolocation not supported';
+    return;
+  }
+  // get current position and start watchPosition
+  navigator.geolocation.getCurrentPosition((pos) => {
+    updateLocationDisplay(pos.coords.latitude, pos.coords.longitude);
+    fetchWeatherForCoords(pos.coords.latitude, pos.coords.longitude);
+  }, (err) => {
+    console.warn('initial geolocation failed', err);
+    coordsEl.textContent = 'Permission denied or unavailable';
+  }, GEO_OPTIONS);
+
+  // watch for updates
+  geoWatchId = navigator.geolocation.watchPosition((pos) => {
+    updateLocationDisplay(pos.coords.latitude, pos.coords.longitude);
+  }, (err) => {
+    console.warn('geo watch error', err);
+  }, { enableHighAccuracy:true, maximumAge:30_000, timeout:10_000 });
+}
+
+function stopGeolocation(){
+  if (geoWatchId !== null) {
+    navigator.geolocation.clearWatch(geoWatchId);
+    geoWatchId = null;
+  }
+}
+
+function updateLocationDisplay(lat, lon){
+  coordsEl.textContent = `lat: ${lat.toFixed(5)} , lon: ${lon.toFixed(5)}`;
+  // Temporarily set locName to coords until weather gives a city name
+  locNameEl.textContent = 'Determining...';
+  // Optionally fetch weather here (we call it above)
+}
+
+/* Fetch weather using OpenWeatherMap (requires API key) */
+let lastWeatherFetch = 0;
+async function fetchWeatherForCoords(lat, lon){
+  if (!WEATHER_API_KEY || WEATHER_API_KEY === 'YOUR_OPENWEATHERMAP_API_KEY') {
+    weatherMainEl.textContent = 'API key required';
+    weatherTempEl.textContent = '—';
+    weatherIconEl.textContent = '❗️';
+    debugEl.textContent = 'Weather: add OpenWeatherMap API key';
+    return;
+  }
+  const now = Date.now();
+  // simple rate limiting
+  if (now - lastWeatherFetch < 60_000) return;
+  lastWeatherFetch = now;
+
+  try {
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&appid=${WEATHER_API_KEY}&units=metric`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Weather fetch failed: ' + res.status);
+    const data = await res.json();
+    // Parse response
+    const name = data.name || 'Unknown place';
+    const temp = data.main?.temp;
+    const desc = data.weather?.[0]?.description || '';
+    const icon = data.weather?.[0]?.icon || '';
+
+    locNameEl.textContent = name;
+    weatherMainEl.textContent = desc ? capitalize(desc) : '—';
+    weatherTempEl.textContent = (typeof temp === 'number') ? `${Math.round(temp)}°C` : '—';
+    weatherIconEl.innerHTML = icon ? `<img src="https://openweathermap.org/img/wn/${icon}@2x.png" alt="${desc}" style="width:48px;height:48px">` : '☁️';
+    debugEl.textContent = `Weather: updated (${new Date().toLocaleTimeString()}) · Sensors: ${accSensor ? 'accelerometer' : 'fallback'}`;
+  } catch (err) {
+    console.error('Weather error', err);
+    debugEl.textContent = 'Weather: fetch failed';
+  }
+}
+
+function capitalize(s){ return s && s.length ? s[0].toUpperCase() + s.slice(1) : s; }
+
+/* Periodically refresh weather if permission given */
+setInterval(async () => {
+  // only attempt if we have coords displayed
+  const coordsText = coordsEl.textContent || '';
+  if (coordsText.includes('lat:')) {
+    const parts = coordsText.match(/lat:\s*([0-9\.\-]+)\s*,\s*lon:\s*([0-9\.\-]+)/);
+    if (parts) {
+      const lat = Number(parts[1]), lon = Number(parts[2]);
+      if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
+        await fetchWeatherForCoords(lat, lon);
+      }
+    }
+  }
+}, WEATHER_POLL_MS);
+
+/* -------------------- Initialization -------------------- */
+// start geolocation immediately (will prompt the user)
+startGeolocation();
+
+// update distance display regularly in case stride changes
+setInterval(() => refreshUI(), 1000);
+
+/* -------------------- Clean up on page hide/unload -------------------- */
+window.addEventListener('pagehide', () => {
+  stopSensors();
+  stopGeolocation();
+});
+
+/* Expose small debugging on global for dev use (optional) */
+window._pedometer = {
+  startSensors, stopSensors, registerStep, getSteps: () => totalSteps
+};
+</script>
+</body>
+</html>
